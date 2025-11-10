@@ -54,6 +54,7 @@ export default function ChatRoom() {
         .limit(100)
 
       if (data) {
+        console.log('Mensagens carregadas:', data)
         setMessages(data)
       }
     }
@@ -72,6 +73,7 @@ export default function ChatRoom() {
           filter: `room_id=eq.${roomId}`
         },
         (payload) => {
+          console.log('Nova mensagem recebida:', payload.new)
           setMessages((current) => [...current, payload.new as ChatMessage])
         }
       )
@@ -104,6 +106,8 @@ export default function ChatRoom() {
 
     if (!error) {
       setNewMessage('')
+    } else {
+      console.error('Erro ao enviar mensagem:', error)
     }
   }
 
@@ -118,8 +122,8 @@ export default function ChatRoom() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-xl">Carregando...</div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+        <div className="text-xl text-white">Carregando...</div>
       </div>
     )
   }
@@ -141,7 +145,7 @@ export default function ChatRoom() {
                 id="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition text-gray-900 bg-white"
                 placeholder="Digite seu nome..."
                 maxLength={20}
                 required
@@ -183,40 +187,46 @@ export default function ChatRoom() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto chat-messages max-w-4xl w-full mx-auto px-4 py-6 space-y-4">
-        {messages.map((message) => {
-          const isOwnMessage = message.username === username
-          return (
-            <div
-              key={message.id}
-              className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
-            >
+        {messages.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-gray-500 text-lg">Nenhuma mensagem ainda. Seja o primeiro a enviar! 👋</p>
+          </div>
+        ) : (
+          messages.map((message) => {
+            const isOwnMessage = message.username === username
+            return (
               <div
-                className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl shadow-md ${
-                  isOwnMessage
-                    ? 'bg-indigo-600 text-white rounded-br-none'
-                    : 'bg-white text-gray-800 rounded-bl-none'
-                }`}
+                key={message.id}
+                className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
               >
-                {!isOwnMessage && (
-                  <div className="font-semibold text-sm text-indigo-600 mb-1">
-                    {message.username}
-                  </div>
-                )}
-                <p className="break-words">{message.content}</p>
                 <div
-                  className={`text-xs mt-1 ${
-                    isOwnMessage ? 'text-indigo-200' : 'text-gray-500'
+                  className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl shadow-md ${
+                    isOwnMessage
+                      ? 'bg-indigo-600 text-white rounded-br-none'
+                      : 'bg-white text-gray-800 rounded-bl-none'
                   }`}
                 >
-                  {formatDistanceToNow(new Date(message.created_at), {
-                    addSuffix: true,
-                    locale: ptBR
-                  })}
+                  {!isOwnMessage && (
+                    <div className="font-semibold text-sm text-indigo-600 mb-1">
+                      {message.username}
+                    </div>
+                  )}
+                  <p className="break-words">{message.content}</p>
+                  <div
+                    className={`text-xs mt-1 ${
+                      isOwnMessage ? 'text-indigo-200' : 'text-gray-500'
+                    }`}
+                  >
+                    {formatDistanceToNow(new Date(message.created_at), {
+                      addSuffix: true,
+                      locale: ptBR
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })
+        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -228,7 +238,7 @@ export default function ChatRoom() {
               type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition text-gray-900 bg-white placeholder-gray-400"
               placeholder="Digite sua mensagem..."
               maxLength={500}
             />
