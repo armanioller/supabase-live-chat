@@ -14,7 +14,6 @@ export default function ChatRoom() {
   const [isLoading, setIsLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll para a última mensagem
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
@@ -26,44 +25,59 @@ export default function ChatRoom() {
   // Carregar sala padrão
   useEffect(() => {
     const loadRoom = async () => {
-      const { data, error } = await supabase
-        .from('chat_rooms')
-        .select('*')
-        .eq('name', 'General Chat')
-        .single()
+      try {
+        const { data, error } = await supabase
+          .from('chat_rooms')
+          .select('*')
+          .eq('name', 'General Chat')
+          .single()
 
-      if (data) {
-        setRoomId(data.id)
+        if (error) {
+          console.error('Erro ao carregar sala:', error)
+        } else if (data) {
+          console.log('Sala carregada:', data)
+          setRoomId(data.id)
+        }
+      } catch (err) {
+        console.error('Erro:', err)
+      } finally {
+        setIsLoading(false)
       }
-      setIsLoading(false)
     }
 
     loadRoom()
   }, [])
 
-  // Carregar mensagens
+  // Carregar mensagens e configurar real-time
   useEffect(() => {
     if (!roomId) return
 
     const loadMessages = async () => {
-      const { data, error } = await supabase
-        .from('chat_messages')
-        .select('*')
-        .eq('room_id', roomId)
-        .order('created_at', { ascending: true })
-        .limit(100)
+      try {
+        const { data, error } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('room_id', roomId)
+          .order('created_at', { ascending: true })
+          .limit(100)
 
-      if (data) {
-        console.log('Mensagens carregadas:', data)
-        setMessages(data)
+        if (error) {
+          console.error('Erro ao carregar mensagens:', error)
+        } else if (data) {
+          console.log('💩 Mensagens carregadas:', data.length)
+          setMessages(data)
+        }
+      } catch (err) {
+        console.error('Erro:', err)
       }
     }
 
     loadMessages()
 
-    // Inscrever-se para mensagens em tempo real
+    // Configurar real-time
+    console.log('🔤 Conectando ao realtime para room:', roomId)
     const channel = supabase
-      .channel('chat_messages')
+      .channel('public:chat_messages')
       .on(
         'postgres_changes',
         {
@@ -73,13 +87,23 @@ export default function ChatRoom() {
           filter: `room_id=eq.${roomId}`
         },
         (payload) => {
-          console.log('Nova mensagem recebida:', payload.new)
-          setMessages((current) => [...current, payload.new as ChatMessage])
+          console.log('✅ Nova mensagem em tempo real:', payload.new)
+          const newMsg = payload.new as ChatMessage
+          setMessages((prev) => {
+            // Evitar duplicatas
+            if (prev.some(m => m.id === newMsg.id)) {
+              return prev
+            }
+            return [...prev, newMsg]
+          })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('📡 Status do canal:', status)
+      })
 
     return () => {
+      console.log('💌"Desconectando do realtime')
       supabase.removeChannel(channel)
     }
   }, [roomId])
@@ -96,22 +120,26 @@ export default function ChatRoom() {
     e.preventDefault()
     if (!newMessage.trim() || !roomId) return
 
-    const { error } = await supabase
+    console.log('💤 Enviando mensagem:', newMessage)
+    
+    const { data, error } = await supabase
       .from('chat_messages')
       .insert({
         room_id: roomId,
         username: username,
         content: newMessage.trim()
       })
+      .select()
 
-    if (!error) {
-      setNewMessage('')
+    if (error) {
+      console.error('❌ Erro ao enviar:', error)
+      alert('Erro ao enviar mensagem: ' + error.message)
     } else {
-      console.error('Erro ao enviar mensagem:', error)
+      console.log('✅ Mensagem enviada:', data)
+      setNewMessage('')
     }
   }
 
-  // Verificar username salvo
   useEffect(() => {
     const savedUsername = localStorage.getItem('chatUsername')
     if (savedUsername) {
@@ -122,38 +150,89 @@ export default function ChatRoom() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
-        <div className="text-xl text-white">Carregando...</div>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        backgroundColor: '#1f2937',
+        color: 'white',
+        fontSize: '20px'
+      }}>
+        Carregando chat...
       </div>
     )
   }
 
   if (!isUsernameSet) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full">
-          <h1 className="text-3xl font-bold text-center mb-6 text-indigo-600">
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        background: 'linear-gradient(to bottom right, #dbeafe, #e0e7ff)',
+        padding: '20px'
+      }}>
+        <div style={{
+          backgroundColor: 'white',
+          padding: '40px',
+          borderRadius: '16px',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+          maxWidth: '400px',
+          width: '100%'
+        }}>
+          <h1 style={{
+            fontSize: '28px',
+            fontWeight: 'bold',
+            textAlign: 'center',
+            marginBottom: '24px',
+            color: '#4f46e5'
+          }}>
             Bem-vindo ao Chat! 💬
           </h1>
-          <form onSubmit={handleSetUsername} className="space-y-4">
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-                Escolha seu nome de usuário:
-              </label>
-              <input
-                type="text"
-                id="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition text-gray-900 bg-white"
-                placeholder="Digite seu nome..."
-                maxLength={20}
-                required
-              />
-            </div>
+          <form onSubmit={handleSetUsername}>
+            <label style={{
+              display: 'block',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: '#374151',
+              marginBottom: '8px'
+            }}>
+              Escolha seu nome de usuário:
+            </label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Digite seu nome..."
+              maxLength={20}
+              required
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                border: '2px solid #d1d5bb',
+                borderRadius: '8px',
+                fontSize: '16px',
+                outline: 'none',
+                marginBottom: '16px',
+                color: '#000000',
+                backgroundColor: '#ffffff'
+              }}
+            />
             <button
               type="submit"
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition duration-200 transform hover:scale-105"
+              style={{
+                width: '100%',
+                backgroundColor: '#4f46e5',
+                color: 'white',
+                padding: '12px',
+                borderRadius: '8px',
+                fontSize: '16px',
+                fontWeight: '600',
+                border: 'none',
+                cursor: 'pointer'
+              }}
             >
               Entrar no Chat
             </button>
@@ -164,13 +243,27 @@ export default function ChatRoom() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100vh',
+      background: 'linear-gradient(to bottom right, #dbeafe, #e0e7ff)'
+    }}>
       {/* Header */}
-      <div className="bg-white shadow-md border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+      <div style={{
+        backgroundColor: 'white',
+        padding: '16px 24px',
+        borderBottom: '1px solid #e5e7eb',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+      }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h1 className="text-2xl font-bold text-indigo-600">Live Chat 💬</h1>
-            <p className="text-sm text-gray-500">Conectado como: <span className="font-semibold text-indigo-600">{username}</span></p>
+            <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#4f46e5', margin: 0 }}>
+              Live Chat 💬
+            </h1>
+            <p style={{ fontSize: '14px', color: '#6b7280', margin: '4px 0 0 0' }}>
+              Conectado como: <span style={{ fontWeight: '600', color: '#4f46e5' }}>{username}</span>
+            </p>
           </div>
           <button
             onClick={() => {
@@ -178,7 +271,14 @@ export default function ChatRoom() {
               setIsUsernameSet(false)
               setUsername('')
             }}
-            className="text-sm text-gray-600 hover:text-indigo-600 transition"
+            style={{
+              fontSize: '14px',
+              color: '#6b7280',
+              backgroundColor: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '8px 12px'
+            }}
           >
             Trocar nome
           </button>
@@ -186,41 +286,54 @@ export default function ChatRoom() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto chat-messages max-w-4xl w-full mx-auto px-4 py-6 space-y-4">
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: '24px',
+        maxWidth: '800px',
+        width: '100%',
+        margin: '0 auto'
+      }}>
         {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500 text-lg">Nenhuma mensagem ainda. Seja o primeiro a enviar! 👋</p>
+          <div style={{ textAlign: 'center', color: '#6b7280', fontSize: '18px', marginTop: '40px' }}>
+            Nenhuma mensagem ainda. Seja o primeiro! 👋
           </div>
         ) : (
           messages.map((message) => {
-            const isOwnMessage = message.username === username
+            const isOwn = message.username === username
             return (
               <div
                 key={message.id}
-                className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                style={{
+                  display: 'flex',
+                  justifyContent: isOwn ? 'flex-end' : 'flex-start',
+                  marginBottom: '16px'
+                }}
               >
-                <div
-                  className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl shadow-md ${
-                    isOwnMessage
-                      ? 'bg-indigo-600 text-white rounded-br-none'
-                      : 'bg-white text-gray-800 rounded-bl-none'
-                  }`}
-                >
-                  {!isOwnMessage && (
-                    <div className="font-semibold text-sm text-indigo-600 mb-1">
+                <div style={{
+                  maxWidth: '70%',
+                  padding: '12px 16px',
+                  borderRadius: '16px',
+                  backgroundColor: isOwn ? '#4f46e5' : 'white',
+                  color: isOwn ? 'white' : '#1f2937',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  borderBottomRightRadius: isOwn ? '4px' : '16px',
+                  borderBottomLeftRadius: isOwn ? '16px' : '4px'
+                }}>
+                  {!isOwn && (
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#4f46e5', marginBottom: '4px' }}>
                       {message.username}
                     </div>
                   )}
-                  <p className="break-words">{message.content}</p>
-                  <div
-                    className={`text-xs mt-1 ${
-                      isOwnMessage ? 'text-indigo-200' : 'text-gray-500'
-                    }`}
-                  >
-                    {formatDistanceToNow(new Date(message.created_at), {
-                      addSuffix: true,
-                      locale: ptBR
-                    })}
+                  <p style={{ margin: 0, fontSize: '15px', wordBreak: 'break-word' }}>
+                    {message.content}
+                  </p>
+                  <div style={{
+                    fontSize: '11px',
+                    marginTop: '4px',
+                    color: isOwn ? 'rgba(255,255,255,0.7)' : '#9ca3af'
+                  }}>
+                    {formatDistanceToNow(new Date(message.created_at), { addSuffix: true, locale: ptBR })}
                   </div>
                 </div>
               </div>
@@ -231,21 +344,44 @@ export default function ChatRoom() {
       </div>
 
       {/* Input */}
-      <div className="bg-white border-t border-gray-200 shadow-lg">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <form onSubmit={handleSendMessage} className="flex gap-2">
+      <div style={{
+        backgroundColor: 'white',
+        borderTop: '1px solid #e5e7eb',
+        padding: '16px 24px',
+        boxShadow: '0 -2px 10px rgba(0,0,0,0.05)'
+      }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+          <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '12px' }}>
             <input
               type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition text-gray-900 bg-white placeholder-gray-400"
               placeholder="Digite sua mensagem..."
               maxLength={500}
+              style={{
+                flex: 1,
+                padding: '12px 16px',
+                border: '2px solid #d1d5db',
+                borderRadius: '8px',
+                fontSize: '16px',
+                outline: 'none',
+                color: '#000000',
+                backgroundColor: '#ffffff'
+              }}
             />
             <button
               type="submit"
               disabled={!newMessage.trim()}
-              className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition duration-200 transform hover:scale-105"
+              style={{
+                backgroundColor: newMessage.trim() ? '#4f46e5' : '#9ca3af',
+                color: 'white',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                fontSize: '16px',
+                fontWeight: '600',
+                border: 'none',
+                cursor: newMessage.trim() ? 'pointer' : 'not-allowed'
+              }}
             >
               Enviar
             </button>
